@@ -27,7 +27,7 @@ local function refreshballs(force)
 
     for _, v in pairs(workspace:GetDescendants()) do
         local firstletter = string.sub(v.Name, 1, 1)
-        if v.Name == "RSL" or v.Name == "IFF" or v.Name == "MPS" or v.Name == "VCL" or v.Name == "VFA" or firstletter == "{" then
+        if v.Name == "RSL" or v.Name == "IFF" or v.Name == "MPS" or v.Name == "VRF" or v.Name == "RFF" or firstletter == "{" then
             table.insert(balls, v)
         end
     end
