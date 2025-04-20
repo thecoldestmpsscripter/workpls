@@ -1,0 +1,188 @@
+-- Services
+local UserInputService = game:GetService("UserInputService")
+local player = game:GetService("Players").LocalPlayer
+
+-- Variables
+local balls = {}
+local touchint = {}
+local lastrefreshtime = 0
+local currentleg = true
+local reach = 1 -- Initial reach value
+local minReach = 1 -- Minimum reach value
+local maxReach = 150 -- Maximum reach value
+
+-- Functions
+local function refreshballs(force)
+    if not force and (lastrefreshtime + 1.5 > os.time()) then return end
+    table.clear(touchint)
+
+    for _, v in pairs(player.Character:GetDescendants()) do
+        if v.Name == "TouchInterest" and v.Parent:IsA("BasePart") then
+            table.insert(touchint, v)
+        end
+    end
+
+    lastrefreshtime = os.time()
+    table.clear(balls)
+
+    for _, v in pairs(workspace:GetDescendants()) do
+        local firstletter = string.sub(v.Name, 1, 1)
+        if v.Name == "RSL" or v.Name == "IFF" or v.Name == "MPS" or v.Name == "VCL" or v.Name == "VFA" or firstletter == "{" then
+            table.insert(balls, v)
+        end
+    end
+end
+
+-- GUI Creation
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.Name = "ReachGUI"
+gui.Enabled = false  -- Initially the GUI is hidden
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 300, 0, 150)  -- Increased height to fit input box
+frame.Position = UDim2.new(0, 50, 0, 50)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BorderSizePixel = 0
+
+-- Title Bar
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, 0, 0, 30)
+title.Text = "Reach Controller"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 20
+
+-- Slider Bar
+local sliderBar = Instance.new("Frame", frame)
+sliderBar.Size = UDim2.new(0, 280, 0, 8)
+sliderBar.Position = UDim2.new(0, 10, 0, 50)
+sliderBar.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+
+local sliderKnob = Instance.new("TextButton", sliderBar)
+sliderKnob.Size = UDim2.new(0, 12, 0, 20)
+sliderKnob.Position = UDim2.new(0, 0, -0.5, 0)
+sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+sliderKnob.Text = ""
+
+local valueLabel = Instance.new("TextLabel", frame)
+valueLabel.Size = UDim2.new(1, 0, 0, 20)
+valueLabel.Position = UDim2.new(0, 0, 1, -40)
+valueLabel.TextColor3 = Color3.new(1, 1, 1)
+valueLabel.BackgroundTransparency = 1
+valueLabel.Text = "Reach: " .. reach
+valueLabel.Font = Enum.Font.SourceSans
+valueLabel.TextSize = 16
+
+-- Manual Input Box
+local inputBox = Instance.new("TextBox", frame)
+inputBox.Size = UDim2.new(0, 120, 0, 30)
+inputBox.Position = UDim2.new(0, 10, 0, 110)
+inputBox.Text = tostring(reach)
+inputBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+inputBox.Font = Enum.Font.SourceSans
+inputBox.TextSize = 18
+inputBox.ClearTextOnFocus = false
+
+-- Slider Logic
+local dragging = false
+
+sliderKnob.MouseButton1Down:Connect(function()
+    dragging = true
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local mouseX = input.Position.X
+        local barStart = sliderBar.AbsolutePosition.X
+        local barWidth = sliderBar.AbsoluteSize.X
+        local percent = math.clamp((mouseX - barStart) / barWidth, 0, 1)
+
+        sliderKnob.Position = UDim2.new(percent, -6, -0.5, 0)
+        reach = math.floor((minReach + percent * (maxReach - minReach)) * 100) / 100
+        valueLabel.Text = "Reach: " .. reach
+        inputBox.Text = tostring(reach)  -- Update input box with new reach value
+    end
+end)
+
+-- Ball touch logic
+UserInputService.InputBegan:Connect(function(i, gameProcessedEvent)
+    if gameProcessedEvent then return end
+    if i.KeyCode == Enum.KeyCode.LeftControl then
+        currentleg = not currentleg
+    end
+
+    refreshballs(false)
+
+    local leg = player.Character and player.Character:FindFirstChild(currentleg and "Right Leg" or "Left Leg")
+    if not leg then return end
+
+    for _, ball in pairs(balls) do
+        if (ball.Position - leg.Position).Magnitude <= reach then
+            for _, ti in pairs(touchint) do
+                if ti.Parent ~= player.Character:FindFirstChild("Head") then
+                    firetouchinterest(ball, ti.Parent, 0)
+                    firetouchinterest(ball, ti.Parent, 1)
+                end
+            end
+        end
+    end
+end)
+
+-- Handle manual reach input
+inputBox.FocusLost:Connect(function()
+    local inputValue = tonumber(inputBox.Text)
+    if inputValue and inputValue >= minReach and inputValue <= maxReach then
+        reach = inputValue
+        valueLabel.Text = "Reach: " .. reach
+        -- Update the slider knob position based on the input value
+        local percent = (reach - minReach) / (maxReach - minReach)
+        sliderKnob.Position = UDim2.new(percent, -6, -0.5, 0)
+    else
+        -- If the input is invalid, reset to the current reach value
+        inputBox.Text = tostring(reach)
+    end
+end)
+
+-- Initial refresh
+refreshballs(true)
+
+-- Movable title bar logic (only the top part of the frame)
+local dragStart
+local startPos
+
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragStart = input.Position
+        startPos = frame.Position -- Position the entire frame
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragStart and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        -- Only change position of the frame (not the slider)
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragStart = nil
+    end
+end)
+
+-- Toggle GUI visibility with F4 key
+UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+    if gameProcessedEvent then return end
+    if input.KeyCode == Enum.KeyCode.F4 then
+        gui.Enabled = not gui.Enabled -- Toggle the visibility of the GUI
+    end
+end)
